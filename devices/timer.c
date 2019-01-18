@@ -24,10 +24,6 @@ static int64_t ticks;
    Initialized by timer_calibrate(). */
 static unsigned loops_per_tick;
 
-/* MRM List of all sleeping threads. These need
-   to be checked if they need to wake up. */
-static struct list sleeping_threads;
-
 static intr_handler_func timer_interrupt;
 static bool too_many_loops (unsigned loops);
 static void busy_wait (int64_t loops);
@@ -41,9 +37,6 @@ timer_init (void)
 {
   pit_configure_channel (0, 2, TIMER_FREQ);
   intr_register_ext (0x20, timer_interrupt, "8254 Timer");
-
-  ASSERT (intr_get_level () == INTR_OFF);
-  list_init (&sleeping_threads);
 }
 
 /* Calibrates loops_per_tick, used to implement brief delays. */
@@ -67,7 +60,7 @@ timer_calibrate (void)
   /* Refine the next 8 bits of loops_per_tick. */
   high_bit = loops_per_tick;
   for (test_bit = high_bit >> 1; test_bit != high_bit >> 10; test_bit >>= 1)
-    if (!too_many_loops (high_bit | test_bit))
+    if (!too_many_loops (loops_per_tick | test_bit))
       loops_per_tick |= test_bit;
 
   printf ("%'"PRIu64" loops/s.\n", (uint64_t) loops_per_tick * TIMER_FREQ);
@@ -99,15 +92,8 @@ timer_sleep (int64_t ticks)
   int64_t start = timer_ticks ();
 
   ASSERT (intr_get_level () == INTR_ON);
-  
-  intr_disable();
-  list_push_front (&sleeping_threads, &thread_current ()->sleepElem);
-  intr_enable();
-  //MRM missed the add to list
-  thread_current ()->endTicks = start + ticks;
-  sema_down( &thread_current ()->sleep_Sem);
-  //while (timer_elapsed (start) < ticks) 
-    //thread_yield ();
+  while (timer_elapsed (start) < ticks) 
+    thread_yield ();
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
@@ -185,24 +171,7 @@ static void
 timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
-  //MRMRMRMMRMR
-  struct list_elem *e;
-
-  ASSERT (intr_get_level () == INTR_OFF);
-
-  for (e = list_begin (&sleeping_threads); e != list_end (&sleeping_threads);
-       e = list_next (e))
-    {
-      struct thread *t = list_entry (e, struct thread, sleepElem);
-      if(ticks >= t->endTicks)
-      {
-        //MRM wake up time (list removal, sema wakeup)
-        list_remove (e);
-        sema_up(&t->sleep_Sem);
-      }
-    }
-
-  //thread_tick ();
+  thread_tick ();
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer

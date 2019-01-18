@@ -1,4 +1,3 @@
-
 #ifndef TESTS_THREADS_TESTS_H
 #define TESTS_THREADS_TESTS_H
 
@@ -8,8 +7,6 @@ typedef void test_func (void);
 
 extern test_func test_alarm_single;
 extern test_func test_alarm_multiple;
-extern test_func test_alarm_mega;
-extern test_func test_alarm_many;
 extern test_func test_alarm_simultaneous;
 extern test_func test_alarm_priority;
 extern test_func test_alarm_zero;

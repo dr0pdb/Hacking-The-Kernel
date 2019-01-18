@@ -13,9 +13,7 @@ static const struct test tests[] =
   {
     {"alarm-single", test_alarm_single},
     {"alarm-multiple", test_alarm_multiple},
-    {"alarm-many", test_alarm_many},
     {"alarm-simultaneous", test_alarm_simultaneous},
-    {"alarm-mega", test_alarm_mega},
     {"alarm-priority", test_alarm_priority},
     {"alarm-zero", test_alarm_zero},
     {"alarm-negative", test_alarm_negative},
