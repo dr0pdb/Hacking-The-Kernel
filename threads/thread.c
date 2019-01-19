@@ -246,6 +246,43 @@ thread_block (void)
   schedule ();
 }
 
+/* Unblocks the first thread of sleepers_list if its wakeup time has arrived
+   and updates the next_wakeup_up in accordance to the first element in 
+   sleepers_list. */
+void
+thread_set_next_wakeup ()
+{
+  enum intr_level old_level;
+  old_level = intr_disable ();
+
+  if (list_empty (&sleepers_list))
+    next_wakeup_at = INT64_MAX;
+  else
+  {
+    struct list_elem *front = list_front (&sleepers_list);
+    struct thread *t = list_entry (front, struct thread, sleepers_elem);
+    if (t->wakeup_at <= next_wakeup_at && timer_ticks () >= next_wakeup_at)
+    {
+      list_pop_front (&sleepers_list);
+      thread_unblock (t);
+
+      if (list_empty (&sleepers_list))
+        next_wakeup_at = INT64_MAX;
+      else
+      {
+        front = list_front (&sleepers_list);
+        t = list_entry (front, struct thread, sleepers_elem);
+        next_wakeup_at = t->wakeup_at;
+      }
+    }
+    else
+      next_wakeup_at = t->wakeup_at;
+  }
+
+  intr_set_level (old_level);
+}
+
+
 /* Custom comparator passed to the list_insert_ordered function for inserting the current thread into the sleepers_list.
 */
 bool

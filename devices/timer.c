@@ -97,6 +97,9 @@ timer_sleep (int64_t ticks)
   //   thread_yield ();
   if(ticks > 0) {
     thread_block_till_tick(final_time);
+
+    // For recursive wakeup of threads.
+    thread_set_next_wakeup();
   }
 }
 
