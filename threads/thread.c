@@ -28,6 +28,11 @@ static struct list ready_list;
    when they are first scheduled and removed when they exit. */
 static struct list all_list;
 
+/* List of processes which are waiting for a specific time ticks.
+  They are added by the alarm timer and removed by the thread_tick function.
+*/
+static struct list sleepers_list;
+
 /* Idle thread. */
 static struct thread *idle_thread;
 
@@ -53,6 +58,7 @@ static long long user_ticks;    /* # of timer ticks in user programs. */
 /* Scheduling. */
 #define TIME_SLICE 4            /* # of timer ticks to give each thread. */
 static unsigned thread_ticks;   /* # of timer ticks since last yield. */
+static int64_t next_wakeup_at;  /* Stores the next time tick at which to wake up the sleeping thread from sleepers thread. */
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
@@ -92,12 +98,14 @@ thread_init (void)
   lock_init (&tid_lock);
   list_init (&ready_list);
   list_init (&all_list);
+  list_init (&sleepers_list);
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
   init_thread (initial_thread, "main", PRI_DEFAULT);
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
+  next_wakeup_at = INT64_MAX;
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -134,6 +142,24 @@ thread_tick (void)
   else
     kernel_ticks++;
 
+  int64_t ticks = timer_ticks();
+  if(ticks >= next_wakeup_at) {
+    struct list_elem *front = list_front (&sleepers_list);
+    struct thread *front_thread = list_entry (front, struct thread, sleepers_elem);
+    
+    list_pop_front(&sleepers_list);
+    thread_unblock(front_thread);
+
+    if (list_empty (&sleepers_list))
+      next_wakeup_at = INT64_MAX;
+    else
+    {
+      front = list_front (&sleepers_list);
+      front_thread = list_entry (front, struct thread, sleepers_elem);
+      next_wakeup_at = front_thread->wakeup_at;
+    }
+  }
+  
   /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
     intr_yield_on_return ();
@@ -218,6 +244,41 @@ thread_block (void)
 
   thread_current ()->status = THREAD_BLOCKED;
   schedule ();
+}
+
+/* Custom comparator passed to the list_insert_ordered function for inserting the current thread into the sleepers_list.
+*/
+bool
+thread_sleep_till_comparator(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED)
+{
+  struct thread *ta = list_entry (a, struct thread, sleepers_elem);
+  struct thread *tb = list_entry (b, struct thread, sleepers_elem);
+
+  return ta->wakeup_at < tb->wakeup_at;
+}
+
+/* Puts the current thread into the sleepers_list and blocks it till the given ticks.
+*/
+void
+thread_block_till_tick(int64_t ticks)
+{
+  struct thread *current = thread_current();
+  enum intr_level old_level;
+  old_level = intr_disable ();
+  
+  // Set the wakeup_at time.
+  current->wakeup_at = ticks;
+  if (ticks < next_wakeup_at)
+    next_wakeup_at = ticks;
+
+  // insert into sleepers list.
+  list_insert_ordered (&sleepers_list, &current->sleepers_elem, thread_sleep_till_comparator, NULL);
+
+  // block the thread.
+  thread_block();
+
+  // turn interrupt back on.
+  intr_set_level(old_level);
 }
 
 /* Transitions a blocked thread T to the ready-to-run state.
@@ -463,6 +524,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
+  t->wakeup_at = -1;
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);

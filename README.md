@@ -10,6 +10,9 @@ actual x86 hardware, though it is often run on top of an x86 emulator, such as B
 
 ### Progress
 - [ ] Threads
+	- [x] Alarm clock
+	- [ ] Priority Scheduler
+	- [ ] Multilevel feedback queue Scheduler 
 - [ ] User programs
 - [ ] Virtual memory
 - [ ] File system
