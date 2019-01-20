@@ -95,6 +95,8 @@ struct thread
     struct list_elem elem;              /* List element. */
     struct list_elem sleepers_elem;       /* List element for sleepers list */
 
+    struct list locks_acquired;         /* Contains the list of all the locks aquired. */
+
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */

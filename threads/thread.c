@@ -58,6 +58,7 @@ static long long user_ticks;    /* # of timer ticks in user programs. */
 
 /* Scheduling. */
 #define TIME_SLICE 4            /* # of timer ticks to give each thread. */
+#define NESTED_PRIORITY_DONATION_LIMIT 8 /* Limit on the nested priority donation. */
 static unsigned thread_ticks;   /* # of timer ticks since last yield. */
 static int64_t next_wakeup_at;  /* Stores the next time tick at which to wake up the sleeping thread from sleepers thread. */
 
@@ -331,7 +332,7 @@ thread_priority_based_comparator(const struct list_elem *a, const struct list_el
   struct thread *ta = list_entry (a, struct thread, priority);
   struct thread *tb = list_entry (b, struct thread, priority);
 
-  return ta->priority >= tb->priority;
+  return thread_get_effective_priority(ta, 1) >= thread_get_effective_priority(tb, 1);
 }
 
 /* Transitions a blocked thread T to the ready-to-run state.
@@ -463,11 +464,60 @@ thread_set_priority (int new_priority)
   }
 }
 
-/* Returns the current thread's priority. */
+/* Returns the current thread's priority. 
+  In case of priority donation, it returns the effective priority of the current thread.
+*/
 int
 thread_get_priority (void) 
 {
-  return thread_current ()->priority;
+  return thread_get_effective_priority(thread_current());
+}
+
+/* Returns the effective priority of the thread t.
+  The effective priority in case of priority donation is the highest priority
+  of the threads which are waiting for a lock currently held by t.
+  In other cases, it is just equal to the priority of the thread.
+*/
+int
+thread_get_effective_priority(struct thread *t, int recursion_depth)
+{
+  int priority = t->priority;
+
+  // Limiting the nested priority donation.
+  if(recursion_depth > NESTED_PRIORITY_DONATION_LIMIT) {
+    return priority;
+  }
+
+  if(!list_empty(&(t->locks_acquired))) {
+    struct list_elem *aquired_lock;
+
+    // Iterate over all the aquired locks of this thread.
+    for (aquired_lock = list_begin (&(t->locks_acquired)); aquired_lock != list_end (&(t->locks_acquired));
+          aquired_lock = list_next (aquired_lock))
+    {
+        struct lock *lck = list_entry (aquired_lock, struct lock, thread_element);
+
+        if(!list_empty(&(lck->waiters))) {
+          struct list_elem *waiter_element;
+
+          // Iterate over all the waiters of this lock and update the priority.
+          for (waiter_element = list_begin (&(lck->waiters)); waiter_element != list_end (&(lck->waiters));
+                waiter_element = list_next (waiter_element)) 
+          {
+            struct thread *waiter_thread = list_entry (waiter_element, struct thread, elem);
+            
+            // recursively get the effective priority of waiter thread.
+            int new_priority = thread_get_effective_priority(waiter_thread, recursion_depth+1);
+            
+            if(priority < new_priority) {
+              priority = new_priority;
+            }
+          }
+        }
+    }
+  }
+
+  return priority;
 }
 
 /* Sets the current thread's nice value to NICE. */
@@ -589,6 +639,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->priority = priority;
   t->magic = THREAD_MAGIC;
   t->wakeup_at = -1;
+  list_init(&(t->locks_acquired));
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
