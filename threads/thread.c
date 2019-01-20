@@ -21,7 +21,8 @@
 #define THREAD_MAGIC 0xcd6abf4b
 
 /* List of processes in THREAD_READY state, that is, processes
-   that are ready to run but not actually running. */
+   that are ready to run but not actually running.
+   By default sorted in non-ascending order of priority*/
 static struct list ready_list;
 
 /* List of all processes.  Processes are added to this list
@@ -227,6 +228,9 @@ thread_create (const char *name, int priority,
   /* Add to run queue. */
   thread_unblock (t);
 
+  /* Start the highest priority thread */
+  thread_yield();
+
   return tid;
 }
 
@@ -318,6 +322,18 @@ thread_block_till_tick(int64_t ticks)
   intr_set_level(old_level);
 }
 
+/* Custom comparator passed to the list_insert_ordered function in order to keep the
+  ready list sorted according to priority.
+*/
+bool
+thread_priority_based_comparator(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED)
+{
+  struct thread *ta = list_entry (a, struct thread, priority);
+  struct thread *tb = list_entry (b, struct thread, priority);
+
+  return ta->priority >= tb->priority;
+}
+
 /* Transitions a blocked thread T to the ready-to-run state.
    This is an error if T is not blocked.  (Use thread_yield() to
    make the running thread ready.)
@@ -335,7 +351,7 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_push_back (&ready_list, &t->elem);
+  list_insert_ordered (&ready_list, &t->elem, thread_priority_based_comparator, NULL);
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -394,7 +410,7 @@ thread_exit (void)
   NOT_REACHED ();
 }
 
-/* Yields the CPU.  The current thread is not put to sleep and
+/* Yields the CPU. The current thread is not put to sleep and
    may be scheduled again immediately at the scheduler's whim. */
 void
 thread_yield (void) 
@@ -406,7 +422,7 @@ thread_yield (void)
 
   old_level = intr_disable ();
   if (cur != idle_thread) 
-    list_push_back (&ready_list, &cur->elem);
+    list_insert_ordered (&ready_list, &cur->elem, thread_priority_based_comparator, NULL);
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -429,11 +445,22 @@ thread_foreach (thread_action_func *func, void *aux)
     }
 }
 
-/* Sets the current thread's priority to NEW_PRIORITY. */
+/* Sets the current thread's priority to NEW_PRIORITY.
+  Yields the thread in case it no longer has the highest priority.
+*/
 void
-thread_set_priority (int new_priority) 
+thread_set_priority (int new_priority)
 {
-  thread_current ()->priority = new_priority;
+  struct thread *t = thread_current ();
+  int current_priority = t->priority;
+  t->priority = new_priority;
+
+  /* There is a chance that the current thread is still of highest priority.
+  The thread_yield function will take care of it and schedule this thread again.
+  */
+  if(current_priority > new_priority) {
+    thread_yield();
+  }
 }
 
 /* Returns the current thread's priority. */
@@ -581,7 +608,7 @@ alloc_frame (struct thread *t, size_t size)
   return t->stack;
 }
 
-/* Chooses and returns the next thread to be scheduled.  Should
+/* Chooses and returns the next thread to be scheduled. Should
    return a thread from the run queue, unless the run queue is
    empty.  (If the running thread can continue running, then it
    will be in the run queue.)  If the run queue is empty, return
