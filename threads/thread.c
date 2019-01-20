@@ -78,6 +78,7 @@ static void *alloc_frame (struct thread *, size_t size);
 static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
+int thread_get_effective_priority(struct thread *t, int recursion_depth);
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -329,8 +330,8 @@ thread_block_till_tick(int64_t ticks)
 bool
 thread_priority_based_comparator(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED)
 {
-  struct thread *ta = list_entry (a, struct thread, priority);
-  struct thread *tb = list_entry (b, struct thread, priority);
+  struct thread *ta = list_entry (a, struct thread, elem);
+  struct thread *tb = list_entry (b, struct thread, elem);
 
   return thread_get_effective_priority(ta, 1) >= thread_get_effective_priority(tb, 1);
 }
@@ -470,7 +471,7 @@ thread_set_priority (int new_priority)
 int
 thread_get_priority (void) 
 {
-  return thread_get_effective_priority(thread_current());
+  return thread_get_effective_priority(thread_current(), 1);
 }
 
 /* Returns the effective priority of the thread t.
@@ -497,11 +498,11 @@ thread_get_effective_priority(struct thread *t, int recursion_depth)
     {
         struct lock *lck = list_entry (aquired_lock, struct lock, thread_element);
 
-        if(!list_empty(&(lck->waiters))) {
+        if(!list_empty(&(lck->semaphore.waiters))) {
           struct list_elem *waiter_element;
 
           // Iterate over all the waiters of this lock and update the priority.
-          for (waiter_element = list_begin (&(lck->waiters)); waiter_element != list_end (&(lck->waiters));
+          for (waiter_element = list_begin (&(lck->semaphore.waiters)); waiter_element != list_end (&(lck->semaphore.waiters));
                 waiter_element = list_next (waiter_element)) 
           {
             struct thread *waiter_thread = list_entry (waiter_element, struct thread, elem);
