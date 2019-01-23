@@ -1,6 +1,7 @@
 # Hacking-The-Kernel
 
-Implementation of Threads, User programs, Virtual memory and File system in educational PintOS.
+Implementation of Alarm clock, Priority and Multilevel feedback 
+queue scheduler in educational PintOS.
 
 ## Project Introduction
 Pintos is a simple instructional operating system framework for the 80×86 architecture. The software supports 
@@ -9,13 +10,9 @@ simple way. Pintos was created at Stanford University by Ben Pfaff in 2004. Pint
 actual x86 hardware, though it is often run on top of an x86 emulator, such as Bochs or Qemu.
 
 ### Progress
-- [ ] Threads
-	- [x] Alarm clock
-	- [ ] Priority Scheduler
-	- [ ] Multilevel feedback queue Scheduler 
-- [ ] User programs
-- [ ] Virtual memory
-- [ ] File system
+- [x] Alarm clock
+- [x] Priority Scheduler
+- [ ] Multilevel feedback queue Scheduler 
 
 ### Installation
 Please follow [this](https://tssurya.wordpress.com/2014/08/16/installing-pintos-on-your-machine/) guide to 
